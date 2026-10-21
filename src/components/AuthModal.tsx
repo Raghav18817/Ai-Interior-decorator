@@ -54,11 +54,14 @@ export function AuthModal({ onSuccess }: AuthModalProps) {
     if (res.success) {
       if (res.whatsappLink) setWhatsappLink(res.whatsappLink)
       if (res.previewUrl) setPreviewUrl(res.previewUrl)
-      if (res.otpHint) setOtpHint(res.otpHint)
+      if (res.otpHint) {
+        setOtpHint(res.otpHint)
+        setOtpCode(res.otpHint) // Auto-populate with the randomly generated OTP
+      }
       setSuccessNotice(
         authType === 'phone'
-          ? `6-digit security OTP dispatched to +91 ${targetContact} via SMS & WhatsApp.`
-          : `6-digit security OTP dispatched to ${targetContact} via Email.`
+          ? `Random 6-digit OTP code generated for +91 ${targetContact}.`
+          : `Random 6-digit OTP code generated for ${targetContact}.`
       )
       setStep('verify')
     } else {
@@ -212,6 +215,30 @@ export function AuthModal({ onSuccess }: AuthModalProps) {
             <span>Send 6-Digit OTP</span>
             <ArrowRight className="w-4 h-4 ml-1" />
           </button>
+
+          <div className="relative flex py-1 items-center">
+            <div className="flex-grow border-t border-slate-800"></div>
+            <span className="flex-shrink mx-3 text-[11px] text-slate-500 uppercase tracking-wider">or instant demo</span>
+            <div className="flex-grow border-t border-slate-800"></div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              const guestUser: AuthUser = {
+                id: `usr_${Date.now()}`,
+                name: 'Guest Designer',
+                provider: 'guest',
+                avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
+                createdAt: new Date().toISOString()
+              }
+              onSuccess(guestUser)
+            }}
+            className="w-full py-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white font-semibold text-xs rounded-xl border border-slate-700 transition-all flex items-center justify-center space-x-2 cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Continue as Guest (Instant Access)</span>
+          </button>
         </form>
       )}
 
@@ -237,9 +264,30 @@ export function AuthModal({ onSuccess }: AuthModalProps) {
             <div className="w-10" />
           </div>
 
+          {/* Prominent Random OTP Display Box */}
+          {otpHint && (
+            <div className="p-3.5 bg-emerald-500/15 border-2 border-emerald-500/40 rounded-2xl flex items-center justify-between text-left shadow-lg">
+              <div>
+                <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3 h-3 text-emerald-400 animate-pulse" />
+                  <span>Your Generated Security OTP</span>
+                </div>
+                <div className="text-3xl font-mono font-black text-white tracking-widest mt-0.5">{otpHint}</div>
+                <div className="text-[11px] text-slate-400">Auto-filled in input below. Click verify to enter.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOtpCode(otpHint)}
+                className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                Auto-Fill
+              </button>
+            </div>
+          )}
+
           <div className="space-y-1.5 text-center">
             <label className="text-xs font-semibold text-slate-300 block">
-              Enter 6-digit OTP code sent to:
+              Enter 6-digit OTP code:
             </label>
             <div className="text-xs font-bold text-emerald-400">
               {authType === 'phone' ? `+91 ${targetContact}` : targetContact}
@@ -254,6 +302,39 @@ export function AuthModal({ onSuccess }: AuthModalProps) {
               placeholder="123456"
               className="w-full py-3 text-center font-mono text-2xl tracking-widest bg-slate-950 border border-slate-700 rounded-xl text-emerald-400 focus:outline-none focus:border-emerald-500 transition-colors shadow-inner mt-2"
             />
+          </div>
+
+          <div className="flex items-center justify-between text-xs pt-1">
+            <button
+              type="button"
+              disabled={isLoading}
+              onClick={async () => {
+                setIsLoading(true)
+                setErrorMsg(null)
+                const res = await sendAuthOTPAsync(targetContact, authType)
+                setIsLoading(false)
+                if (res.success && res.otpHint) {
+                  setOtpHint(res.otpHint)
+                  setOtpCode(res.otpHint)
+                  setSuccessNotice(`New random OTP generated: ${res.otpHint}`)
+                }
+              }}
+              className="text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer flex items-center space-x-1"
+            >
+              <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>Resend New OTP</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStep('input')
+                setOtpCode('')
+                setErrorMsg(null)
+              }}
+              className="text-slate-400 hover:text-white cursor-pointer"
+            >
+              Change Contact
+            </button>
           </div>
 
           {/* Direct WhatsApp / Gmail Delivery Access Links */}

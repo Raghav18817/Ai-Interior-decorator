@@ -193,19 +193,19 @@ export async function sendAuthOTPAsync(
     console.warn('Backend API request failed, falling back:', err)
   }
 
-  // Fallback for static hosting (Vercel/Netlify static CDN)
-  const demoOTP = '123456'
+  // Fallback for static hosting (Vercel/Netlify static CDN): generates random 6-digit OTP
+  const randomOTP = Math.floor(100000 + Math.random() * 900000).toString()
   const record: OTPRecord = {
     target: cleanTarget,
-    code: demoOTP,
+    code: randomOTP,
     expiresAt: Date.now() + 10 * 60 * 1000,
     type
   }
   localStorage.setItem(OTP_STORAGE_KEY, JSON.stringify(record))
   return { 
     success: true, 
-    message: `Verification code generated (Demo/Static mode: use ${demoOTP})`,
-    otpHint: demoOTP
+    message: `Verification code generated: ${randomOTP}`,
+    otpHint: randomOTP
   }
 }
 
