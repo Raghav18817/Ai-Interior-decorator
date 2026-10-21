@@ -80,15 +80,9 @@ export const VaastuChatPanel: React.FC<VaastuChatPanelProps> = ({
     {
       id: 'welcome',
       role: 'assistant',
-      content: `Hello! I am **Vaastu AI**, your conversational interior design and spatial harmony assistant.
+      content: `Hey! What's going on?
 
-I can help align your room with **Vaastu Shastra** and other cultural traditions, optimize furniture positions, and edit your 3D room model directly through chat.
-
-Try asking:
-- *"Move the bed to the Southwest corner"*
-- *"Where is the best spot for my desk?"*
-- *"Clear the center of the room"*
-- *"Align for morning East daylight"*`,
+I'm **Vaastu AI**. Tell me what you'd like to do with your space — ask me any questions about Vaastu or interior design, or tell me to move, rotate, add, or arrange furniture in your 3D room!`,
       timestamp: Date.now(),
       culturalContext: 'vaastu_hindu',
       isTraditionalGuidance: false
@@ -182,6 +176,14 @@ Try asking:
       if (result.response.proposedAction) {
         onPreviewProposal(result.response.proposedAction)
       }
+
+      // If the user confirmed with an affirmative message, commit the layout
+      const isAffirmative = /^(yes|yeah|yup|sure|ok|okay|apply|accept|do it|looks good|commit|save it|perfect|go ahead|apply it)\b/i.test(text) ||
+                            text.includes('apply this') || text.includes('apply changes') || text.includes('apply it') ||
+                            text.includes('looks good') || text.includes('looks great')
+      if (isAffirmative && activePreviewAction) {
+        onAcceptProposal(activePreviewAction)
+      }
     } catch (err: any) {
       setErrorMessage(err.message || 'Network error communicating with Vaastu AI')
     } finally {
@@ -215,10 +217,11 @@ Try asking:
   }
 
   const suggestedPrompts = [
-    { label: 'Check Vaastu Layout', text: 'Analyze this room according to Vaastu Shastra principles and suggest layout improvements.' },
+    { label: "What's going on?", text: "What's going on?" },
     { label: 'Move Bed to Southwest', text: 'Move the bed to the Southwest corner.' },
-    { label: 'Keep Center Open', text: 'Clear the center of the room to keep the Brahmasthan open.' },
-    { label: 'Morning Light Alignment', text: 'Arrange seating and study table to receive morning East daylight.' }
+    { label: 'Where should mirror be?', text: 'Where should I place the mirror in this room according to Vaastu?' },
+    { label: 'Add an Indoor Plant', text: 'Add an indoor plant in the Northeast.' },
+    { label: 'Clear Center (Brahmasthan)', text: 'Clear the center of the room to keep the Brahmasthan open.' }
   ]
 
   return (
@@ -256,7 +259,7 @@ Try asking:
                   {
                     id: `welcome_${Date.now()}`,
                     role: 'assistant',
-                    content: 'Conversation cleared. How can I assist with your 3D room design today?',
+                    content: `Hey! What's going on? How can I help you design or modify your 3D room?`,
                     timestamp: Date.now()
                   }
                 ])

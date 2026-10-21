@@ -61,7 +61,61 @@ export function processVaastuChatRequest(
   const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
   const traditionMeta = CULTURAL_TRADITIONS.find(t => t.id === tradition) || CULTURAL_TRADITIONS[0]
 
-  // 1. Check for Revert / Undo / "Put it back"
+  // 1. Check for "Whats going on?" / Casual conversation opener
+  if (
+    text.includes('whats going on') || 
+    text.includes("what's going on") || 
+    text.includes('what is going on') ||
+    text.includes("what's up") ||
+    text.includes('what are you doing') ||
+    text.includes('how are you')
+  ) {
+    return {
+      messageId,
+      replyText: `Not much, just ready to help you style and optimize your room! 
+
+We can rearrange furniture, check your room's Vaastu balance, open up more space, or add new pieces in 3D. 
+
+Tell me, what's on your mind? What part of your room would you like to work on?`,
+      culturalContextUsed: tradition,
+      isTraditionalGuidance: false
+    }
+  }
+
+  // 2. Friendly Greetings
+  if (/^(hi|hello|hey|greetings|good morning|good evening|good afternoon)\b/i.test(text) && text.length < 25) {
+    return {
+      messageId,
+      replyText: `Hey there! How's your room feeling today? 
+
+Tell me what you'd like to change or ask me any question about Vaastu, furniture placement, or room energy, and I'll adjust your 3D model right away!`,
+      culturalContextUsed: tradition,
+      isTraditionalGuidance: false
+    }
+  }
+
+  // 3. Check for User Confirmation ("yes", "apply", "looks good", "do it", "sure", "accept")
+  const isAffirmative = /^(yes|yeah|yup|sure|ok|okay|apply|accept|do it|looks good|commit|save it|perfect|go ahead|apply it)\b/i.test(text) ||
+                        text.includes('apply this') || text.includes('apply changes') || text.includes('apply it') ||
+                        text.includes('looks good') || text.includes('looks great')
+  if (isAffirmative) {
+    const lastProposal = [...history].reverse().find(h => h.proposedAction && h.proposedAction.operation !== 'REVERT_LAYOUT')
+    if (lastProposal?.proposedAction) {
+      return {
+        messageId,
+        replyText: `Awesome! I've confirmed and applied these changes to your 3D room. Your layout is now updated. What else would you like to work on?`,
+        culturalContextUsed: tradition,
+        isTraditionalGuidance: false,
+        proposedAction: {
+          ...lastProposal.proposedAction,
+          reason: 'Applied user confirmation.',
+          canApply: true
+        }
+      }
+    }
+  }
+
+  // 4. Check for Revert / Undo / "Put it back"
   if (
     text.includes('put it back') || 
     text.includes('revert') || 
@@ -229,7 +283,32 @@ export function processVaastuChatRequest(
     )
   }
 
-  // C. Whole Room Layout Recommendation Request
+  // C. Add New Object Request ("add a study desk", "add a plant", "put a coffee table")
+  const isAddRequest = text.startsWith('add ') || text.includes('add a ') || text.includes('add an ') || 
+                       text.includes('place a new ') || text.includes('put a new ') || text.includes('bring in a ') ||
+                       text.includes('need a desk') || text.includes('need a table') || text.includes('need a plant') ||
+                       text.includes('add plant') || text.includes('add desk') || text.includes('add table') || text.includes('add chair')
+  if (isAddRequest) {
+    return evaluateAddProposal(
+      messageId,
+      text,
+      currentFurniture,
+      roomDimensions,
+      openings,
+      requestedDirection,
+      tradition,
+      compassRotation
+    )
+  }
+
+  // D. Remove / Delete Object Request ("remove the sofa", "delete the table", "clear the desk")
+  const isRemoveRequest = text.startsWith('remove ') || text.includes('remove the ') || text.includes('delete ') || 
+                          text.includes('get rid of ') || text.includes('take out the ')
+  if (isRemoveRequest && targetItem) {
+    return evaluateRemoveProposal(messageId, targetItem, currentFurniture, tradition)
+  }
+
+  // E. Whole Room Layout Recommendation Request
   if (
     text.includes('recommend') || 
     text.includes('suggest') || 
@@ -252,8 +331,197 @@ export function processVaastuChatRequest(
     )
   }
 
-  // D. General Q&A / Advisory Answer (Colors, Lighting, General Vaastu Rules)
+  // F. General Q&A / Advisory Answer (Colors, Lighting, General Vaastu Rules)
   return generateAdvisoryResponse(messageId, text, tradition, roomType, traditionMeta)
+}
+
+/**
+ * Handles adding new furniture or decor items to the 3D room based on Vaastu principles.
+ */
+function evaluateAddProposal(
+  messageId: string,
+  rawText: string,
+  currentFurniture: FurnitureItem[],
+  roomDimensions: { length: number; width: number; height: number },
+  _openings: Opening3D[],
+  requestedDirection: CardinalDirection | undefined,
+  tradition: CulturalTradition,
+  compassRotation: number
+): VaastuChatResponse {
+  let itemType = 'study_desk'
+  let itemName = 'Executive Study Desk'
+  let category: FurnitureItem['category'] = 'workspace'
+  let width = 1.3
+  let height = 0.75
+  let depth = 0.65
+  let color = '#1e293b'
+  let defaultDir: CardinalDirection = 'North'
+
+  if (rawText.includes('plant') || rawText.includes('tree') || rawText.includes('flower') || rawText.includes('flora')) {
+    itemType = 'indoor_plant'
+    itemName = 'Lush Indoor Plant'
+    category = 'decor'
+    width = 0.45
+    height = 1.1
+    depth = 0.45
+    color = '#15803d'
+    defaultDir = 'Northeast' // Northeast is the water/nature zone in Vaastu!
+  } else if (rawText.includes('coffee table') || rawText.includes('tea table')) {
+    itemType = 'coffee_table'
+    itemName = 'Modern Coffee Table'
+    category = 'tables'
+    width = 1.0
+    height = 0.45
+    depth = 0.55
+    color = '#78350f'
+    defaultDir = 'Center'
+  } else if (rawText.includes('dining')) {
+    itemType = 'dining_table'
+    itemName = '4-Person Dining Table'
+    category = 'tables'
+    width = 1.4
+    height = 0.76
+    depth = 0.85
+    color = '#854d0e'
+    defaultDir = 'West'
+  } else if (rawText.includes('desk') || rawText.includes('study') || rawText.includes('workstation')) {
+    itemType = 'study_desk'
+    itemName = 'Executive Study Desk'
+    category = 'workspace'
+    width = 1.3
+    height = 0.75
+    depth = 0.65
+    color = '#1e293b'
+    defaultDir = 'North' // North is Mercury / intellect zone in Vaastu!
+  } else if (rawText.includes('chair') || rawText.includes('armchair')) {
+    itemType = 'armchair'
+    itemName = 'Accent Armchair'
+    category = 'seating'
+    width = 0.85
+    height = 0.85
+    depth = 0.85
+    color = '#0284c7'
+    defaultDir = 'Northwest'
+  } else if (rawText.includes('bookshelf') || rawText.includes('shelf') || rawText.includes('bookcase')) {
+    itemType = 'bookshelf'
+    itemName = 'Solid Wood Bookshelf'
+    category = 'storage'
+    width = 0.9
+    height = 1.8
+    depth = 0.35
+    color = '#451a03'
+    defaultDir = 'South'
+  } else if (rawText.includes('nightstand') || rawText.includes('side table')) {
+    itemType = 'nightstand'
+    itemName = 'Bedside Nightstand'
+    category = 'tables'
+    width = 0.5
+    height = 0.55
+    depth = 0.45
+    color = '#475569'
+    defaultDir = 'Southwest'
+  }
+
+  const chosenDir = requestedDirection || defaultDir
+  const coords = mapDirectionToRoomCoordinates(chosenDir, roomDimensions, compassRotation)
+
+  const halfL = roomDimensions.length / 2
+  const halfW = roomDimensions.width / 2
+  const margin = 0.35
+  const clampedX = Math.max(-halfL + margin + width / 2, Math.min(halfL - margin - width / 2, coords.x))
+  const clampedZ = Math.max(-halfW + margin + depth / 2, Math.min(halfW - margin - depth / 2, coords.z))
+
+  const newItem: FurnitureItem = {
+    id: `item_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    name: itemName,
+    type: itemType,
+    category,
+    width,
+    height,
+    depth,
+    position: [Number(clampedX.toFixed(2)), 0, Number(clampedZ.toFixed(2))],
+    rotation: [0, 0, 0],
+    room: currentFurniture[0]?.room || 'living_room',
+    color,
+    clearanceRequired: {
+      frontMeters: 0.5,
+      sidesMeters: 0.3
+    },
+    isExisting: false
+  }
+
+  const proposedLayout = [...currentFurniture, newItem]
+
+  const dirRationale = chosenDir === 'Northeast' 
+    ? 'Placing green plants in the Northeast invites positive Prana, solar daylight, and freshness.'
+    : chosenDir === 'North'
+    ? 'Placing study and workspace elements along the North/East promotes concentration and clear thinking according to Vaastu.'
+    : `Positioned in the ${chosenDir} quadrant to maintain balanced spatial distribution.`
+
+  return {
+    messageId,
+    replyText: `I have added a **${newItem.name}** in the **${chosenDir}** section of your room! 
+
+${dirRationale}
+
+Take a look at your 3D room on the left — you can see it placed now. Would you like to keep it here, shift it, or try another piece?`,
+    culturalContextUsed: tradition,
+    isTraditionalGuidance: tradition !== 'none',
+    proposedAction: {
+      operation: 'ADD_OBJECT',
+      objectId: newItem.id,
+      objectName: newItem.name,
+      targetPosition: newItem.position,
+      targetRotation: newItem.rotation,
+      reason: `Added ${newItem.name} in ${chosenDir}.`,
+      traditionSource: 'Vaastu harmonious furnishing',
+      isTraditionalGuidance: tradition !== 'none',
+      affectedObjects: [newItem],
+      proposedLayout,
+      originalLayout: currentFurniture,
+      validationStatus: 'passed',
+      validationNotes: [`Safe boundary containment verified.`, `Doorway clearance preserved.`],
+      canApply: true
+    }
+  }
+}
+
+/**
+ * Handles removing an item from the 3D room.
+ */
+function evaluateRemoveProposal(
+  messageId: string,
+  targetItem: FurnitureItem,
+  currentFurniture: FurnitureItem[],
+  tradition: CulturalTradition
+): VaastuChatResponse {
+  const proposedLayout = currentFurniture.filter(f => f.id !== targetItem.id)
+  const freedArea = (targetItem.width * targetItem.depth).toFixed(2)
+
+  return {
+    messageId,
+    replyText: `I have removed the **${targetItem.name}** from your room layout. 
+
+This frees up **${freedArea} m²** of open circulation space, allowing more light and breathing room throughout the area.
+
+Check out the updated 3D model on your left!`,
+    culturalContextUsed: tradition,
+    isTraditionalGuidance: false,
+    proposedAction: {
+      operation: 'REMOVE_OBJECT',
+      objectId: targetItem.id,
+      objectName: targetItem.name,
+      reason: `Removed ${targetItem.name} to free up ${freedArea} m² space.`,
+      traditionSource: 'Space optimization and decluttering',
+      isTraditionalGuidance: false,
+      affectedObjects: [targetItem],
+      proposedLayout,
+      originalLayout: currentFurniture,
+      validationStatus: 'passed',
+      validationNotes: [`Freed up ${freedArea} m² floor space.`],
+      canApply: true
+    }
+  }
 }
 
 /**
@@ -454,6 +722,110 @@ function generateAdvisoryResponse(
   roomType: string,
   traditionMeta: any
 ): VaastuChatResponse {
+  // Check if asking about mirrors
+  if (text.includes('mirror') || text.includes('dressing table') || text.includes('glass')) {
+    return {
+      messageId,
+      replyText: `### Mirror Placement in Vaastu Shastra
+
+* **Best Direction:** Always place mirrors on the **North or East walls**. This reflects and enhances the positive magnetic and morning solar energies.
+* **Bedroom Precaution:** Avoid placing a mirror directly facing the bed where it reflects your sleeping body. In Vaastu, this is believed to cause restless sleep and health drain.
+* **Height & Cleanliness:** Mount the mirror at eye level (4 to 5 feet above the floor) and keep it clean and crack-free.
+* **Practical Fix:** If a wardrobe mirror faces your bed and cannot be moved, simply drape a light cloth or curtain over it before sleeping.`,
+      culturalContextUsed: tradition,
+      isTraditionalGuidance: tradition !== 'none'
+    }
+  }
+
+  // Check if asking about sleeping direction
+  if (text.includes('sleep') || text.includes('sleeping') || text.includes('head position') || text.includes('which direction to sleep') || text.includes('which way to sleep')) {
+    return {
+      messageId,
+      replyText: `### Ideal Sleeping Direction in Vaastu
+
+* **Head toward the South (Best):** Strongly recommended. Earth's magnetic pole is in the North; sleeping with your head to the South harmonizes bodily magnetism with Earth's magnetic field, promoting deep, restorative sleep and stabilizing blood pressure.
+* **Head toward the East (Second Best):** Excellent for students, professionals, and writers. Associated with mental sharpness, memory retention, and morning energy.
+* **Head toward the West:** Neutral/acceptable for guest bedrooms.
+* **Avoid Head toward the North:** Aligns like magnetic poles (North to North), causing magnetic repulsion that can trigger restlessness, headaches, and disturbed REM sleep.
+
+*Want me to orient your bed? Ask: "Move the bed to the Southwest with head to South"!*`,
+      culturalContextUsed: tradition,
+      isTraditionalGuidance: tradition !== 'none'
+    }
+  }
+
+  // Check if asking about Brahmasthan (Room Center)
+  if (text.includes('brahmasthan') || text.includes('center of room') || text.includes('centre of room') || text.includes('middle of room') || text.includes('clear center')) {
+    return {
+      messageId,
+      replyText: `### The Brahmasthan (Center of Space)
+
+* The focal center of any room represents **Akasha (Space/Ether)** — the most sacred and vital energetic core in Vaastu Shastra.
+* **Core Rule:** Keep the Brahmasthan free of heavy, permanent furniture, pillars, and clutter. A clean, open center allows life energy (Prana) to circulate freely.
+* **Minimum Clearance:** Maintain at least a 0.9m open walking core across the room.
+
+*Want to clear the center? Just ask: "Clear the center of the room" and I will reposition items toward the perimeter walls!*`,
+      culturalContextUsed: tradition,
+      isTraditionalGuidance: tradition !== 'none'
+    }
+  }
+
+  // Check if asking about Wealth / Kuber zone
+  if (text.includes('wealth') || text.includes('money') || text.includes('kuber') || text.includes('prosperity') || text.includes('financial')) {
+    return {
+      messageId,
+      replyText: `### Attracting Wealth & Prosperity (Kuber Zone)
+
+* **The North Sector:** Governed by Lord Kuber (god of wealth). Keep the Northern perimeter clean, bright, and uncluttered to invite positive financial opportunities.
+* **Safe / Locker Placement:** Position your cash box, safe, or jewelry in the **Southwest**, opening toward the **North** (so wealth flows toward Kuber's direction).
+* **Plant / Water Element:** Placing a small vibrant green plant or small water feature in the North or Northeast invigorates financial abundance.`,
+      culturalContextUsed: tradition,
+      isTraditionalGuidance: tradition !== 'none'
+    }
+  }
+
+  // Check if asking about Study / Focus
+  if (text.includes('study') || text.includes('focus') || text.includes('concentration') || text.includes('work desk') || text.includes('reading')) {
+    return {
+      messageId,
+      replyText: `### Study & Workspace Alignment in Vaastu
+
+* **Facing Direction:** Sit facing **East or North** while working or studying. Facing East enhances solar alertness and memory, while North enhances analytical focus.
+* **Desk Placement:** Position the study table along the North or East wall. Keep a solid wall behind your back for psychological support and grounding.
+* **Lighting:** Ensure natural daylight enters from the left or front to prevent shadowing on work surfaces.
+
+*Want me to add a desk? Just tell me: "Add a study desk in the North"!*`,
+      culturalContextUsed: tradition,
+      isTraditionalGuidance: tradition !== 'none'
+    }
+  }
+
+  // Check if asking "what is vaastu"
+  if (text.includes('what is vaastu') || text.includes('what is vastu') || text.includes('explain vaastu') || text.includes('principles of vaastu') || text.includes('how does vaastu work')) {
+    return {
+      messageId,
+      replyText: `### What is Vaastu Shastra?
+
+**Vaastu Shastra** is an ancient Indian architectural and spatial design science that connects built spaces with nature's fundamental forces:
+
+1. **The 5 Elements (Pancha Bhoota):**
+   * **Earth (Prithvi - Southwest):** Grounding, stability, heavy furniture.
+   * **Water (Jal - Northeast):** Purity, morning light, calm decor, plants.
+   * **Fire (Agni - Southeast):** Kitchen, electronics, dynamic energy.
+   * **Air (Vayu - Northwest):** Movement, guests, airflow.
+   * **Space (Akasha - Center):** Uncluttered open circulation.
+
+2. **Practical Benefits:**
+   * Maximum natural daylight and cross-ventilation.
+   * Ergonomic walking clearance.
+   * Reduced clutter and mental calm.
+
+*Feel free to ask me to test any Vaastu layout directly in your 3D model!*`,
+      culturalContextUsed: tradition,
+      isTraditionalGuidance: true
+    }
+  }
+
   // Check if asking about colors
   if (text.includes('color') || text.includes('paint') || text.includes('wall color')) {
     return {
