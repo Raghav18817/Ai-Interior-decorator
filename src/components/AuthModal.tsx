@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AuthUser } from '../types/auth'
-import { sendAuthOTPAsync, verifyAuthOTPAsync, fetchLatestDatabaseOTP } from '../services/authService'
+import { sendAuthOTPAsync, verifyAuthOTPAsync } from '../services/authService'
 import { 
   Phone, 
   Mail, 
@@ -12,8 +12,7 @@ import {
   RefreshCw, 
   Sparkles,
   ArrowLeft,
-  ExternalLink,
-  KeyRound
+  ExternalLink
 } from 'lucide-react'
 
 interface AuthModalProps {
@@ -30,7 +29,6 @@ export function AuthModal({ onSuccess }: AuthModalProps) {
   const [successNotice, setSuccessNotice] = useState<string | null>(null)
   const [whatsappLink, setWhatsappLink] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [otpHint, setOtpHint] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
   // Step 1: Send OTP to Phone or Email (dispatches through backend API)
@@ -40,7 +38,6 @@ export function AuthModal({ onSuccess }: AuthModalProps) {
     setSuccessNotice(null)
     setWhatsappLink(null)
     setPreviewUrl(null)
-    setOtpHint(null)
 
     if (!targetContact.trim()) {
       setErrorMsg(authType === 'phone' ? 'Please enter your mobile number.' : 'Please enter your email address.')
@@ -54,14 +51,11 @@ export function AuthModal({ onSuccess }: AuthModalProps) {
     if (res.success) {
       if (res.whatsappLink) setWhatsappLink(res.whatsappLink)
       if (res.previewUrl) setPreviewUrl(res.previewUrl)
-      if (res.otpHint) {
-        setOtpHint(res.otpHint)
-        setOtpCode(res.otpHint) // Auto-populate with the randomly generated OTP
-      }
+      setOtpCode('') // Keep input clean and empty so user enters the code received in their account
       setSuccessNotice(
         authType === 'phone'
-          ? `Random 6-digit OTP code generated for +91 ${targetContact}.`
-          : `Random 6-digit OTP code generated for ${targetContact}.`
+          ? `6-digit security code dispatched to +91 ${targetContact}. Check your messages and enter it below.`
+          : `6-digit security code dispatched to ${targetContact}. Check your inbox and enter it below.`
       )
       setStep('verify')
     } else {
@@ -264,43 +258,27 @@ export function AuthModal({ onSuccess }: AuthModalProps) {
             <div className="w-10" />
           </div>
 
-          {/* Prominent Random OTP Display Box */}
-          {otpHint && (
-            <div className="p-3.5 bg-emerald-500/15 border-2 border-emerald-500/40 rounded-2xl flex items-center justify-between text-left shadow-lg">
-              <div>
-                <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Sparkles className="w-3 h-3 text-emerald-400 animate-pulse" />
-                  <span>Your Generated Security OTP</span>
-                </div>
-                <div className="text-3xl font-mono font-black text-white tracking-widest mt-0.5">{otpHint}</div>
-                <div className="text-[11px] text-slate-400">Auto-filled in input below. Click verify to enter.</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOtpCode(otpHint)}
-                className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
-              >
-                Auto-Fill
-              </button>
-            </div>
-          )}
-
-          <div className="space-y-1.5 text-center">
+          <div className="space-y-2 text-center py-1">
             <label className="text-xs font-semibold text-slate-300 block">
-              Enter 6-digit OTP code:
+              Enter 6-digit verification code:
             </label>
-            <div className="text-xs font-bold text-emerald-400">
+            <div className="text-sm font-bold text-emerald-400">
               {authType === 'phone' ? `+91 ${targetContact}` : targetContact}
             </div>
+            <p className="text-[11px] text-slate-400">
+              {authType === 'phone'
+                ? 'Check your SMS / WhatsApp messages for the code.'
+                : 'Check your Gmail / Email inbox for the code.'}
+            </p>
             <input
               type="text"
               maxLength={6}
               required
               autoFocus
               value={otpCode}
-              onChange={(e) => setOtpCode(e.target.value)}
-              placeholder="123456"
-              className="w-full py-3 text-center font-mono text-2xl tracking-widest bg-slate-950 border border-slate-700 rounded-xl text-emerald-400 focus:outline-none focus:border-emerald-500 transition-colors shadow-inner mt-2"
+              onChange={(e) => setOtpCode(e.target.value.replace(/[^0-9]/g, ''))}
+              placeholder="• • • • • •"
+              className="w-full py-3 text-center font-mono text-2xl tracking-widest bg-slate-950 border border-slate-700 rounded-xl text-emerald-400 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 transition-colors shadow-inner mt-2"
             />
           </div>
 
@@ -313,16 +291,17 @@ export function AuthModal({ onSuccess }: AuthModalProps) {
                 setErrorMsg(null)
                 const res = await sendAuthOTPAsync(targetContact, authType)
                 setIsLoading(false)
-                if (res.success && res.otpHint) {
-                  setOtpHint(res.otpHint)
-                  setOtpCode(res.otpHint)
-                  setSuccessNotice(`New random OTP generated: ${res.otpHint}`)
+                if (res.success) {
+                  if (res.whatsappLink) setWhatsappLink(res.whatsappLink)
+                  if (res.previewUrl) setPreviewUrl(res.previewUrl)
+                  setOtpCode('')
+                  setSuccessNotice(`A fresh 6-digit code has been dispatched to your ${authType === 'phone' ? 'phone' : 'email'}.`)
                 }
               }}
               className="text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer flex items-center space-x-1"
             >
               <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
-              <span>Resend New OTP</span>
+              <span>Resend Code</span>
             </button>
             <button
               type="button"
@@ -377,35 +356,6 @@ export function AuthModal({ onSuccess }: AuthModalProps) {
               )}
             </div>
           )}
-
-          {/* Instant Server Database Retrieve Action (Guarantees Access on Any Device) */}
-          <div className="pt-1 text-center space-y-1">
-            <button
-              type="button"
-              onClick={async () => {
-                setIsLoading(true)
-                setErrorMsg(null)
-                const dbRes = await fetchLatestDatabaseOTP(targetContact, authType)
-                setIsLoading(false)
-                if (dbRes.success && dbRes.code) {
-                  setOtpCode(dbRes.code)
-                  setSuccessNotice(`Auto-filled code [${dbRes.code}] from central server database! Click Verify to enter.`)
-                } else if (otpHint) {
-                  setOtpCode(otpHint)
-                  setSuccessNotice(`Auto-filled code [${otpHint}] from session! Click Verify to enter.`)
-                } else {
-                  setErrorMsg(dbRes.error || 'No active OTP found in database for this destination.')
-                }
-              }}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-semibold border border-slate-700 transition-colors cursor-pointer"
-            >
-              <KeyRound className="w-3.5 h-3.5" />
-              <span>Retrieve OTP from Server Database</span>
-            </button>
-            <p className="text-[10px] text-slate-400">
-              Stored in central database &bull; Works across all devices
-            </p>
-          </div>
 
           <button
             type="submit"
