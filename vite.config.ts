@@ -842,6 +842,7 @@ Provide an articulate, helpful, conversational response (under 120 words). If ap
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: './',
   plugins: [react(), backendDatabaseApiPlugin()],
   server: {
     host: true, // Listen on all network interfaces (works on mobile, tablets & laptops)
